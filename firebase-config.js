@@ -1,6 +1,6 @@
 // Firebase Console > Project settings > Your apps > Hisab Web.
 export const firebaseConfig = {
-  apiKey: "AIzaSyB8yG6ihNl1N9F3-dg5-_52nG15Se7Y0wg",
+  apiKey: "AIzaSyB8yG6ihNl1N9F3-dg5-_52nGI5Se7Y0Wg",
   authDomain: "almuafy-hisab-e8803.firebaseapp.com",
   projectId: "almuafy-hisab-e8803",
   storageBucket: "almuafy-hisab-e8803.firebasestorage.app",
