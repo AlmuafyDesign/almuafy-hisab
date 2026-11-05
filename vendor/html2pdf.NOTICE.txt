@@ -1,0 +1,1 @@
+html2pdf.js (v0.10.1), copyright Erik Koopmans and contributors. Distributed under the MIT License. https://github.com/eKoopmans/html2pdf.js

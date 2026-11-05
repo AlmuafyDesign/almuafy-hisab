@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "almuafy-hisab-e8803"
+  },
+  "targets": {
+    "almuafy-hisab-e8803": {
+      "hosting": {
+        "hisab-web": [
+          "almuafy-hisab-e8803"
+        ]
+      }
+    }
+  }
+}
