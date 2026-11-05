@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07875f" />
   <meta name="description" content="আয়, ব্যয় ও ধার হিসাব রাখুন সহজে।" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
   <title>হিসাবখাতা — আপনার টাকার হিসাব</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23087f5b%22/%3E%3Ctext x=%2250%22 y=%2270%22 text-anchor=%22middle%22 font-size=%2258%22 fill=%22white%22%3E৳%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
@@ -24,7 +29,7 @@
       <div class="sidebar-bottom"><div class="sync-state"><span class="sync-dot"></span><span id="sync-label">Firebase সংযোগের অপেক্ষায়</span></div><button class="account-button" id="login-button"><span class="avatar" id="account-avatar">আ</span><span id="account-label">Google দিয়ে লগইন<small>আপনার হিসাব সিঙ্ক করুন</small></span><span class="account-arrow">→</span></button></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><button class="mobile-brand" aria-label="হিসাবখাতা">হিসাবখাতা</button><div class="breadcrumb" id="breadcrumb">আপনার হিসাব <span>/</span> ড্যাশবোর্ড</div><div class="top-actions"><div class="date-pill"><span>▦</span> <span id="today-date"></span></div><button class="icon-button profile-shortcut" data-page="profile" aria-label="আমার প্রোফাইল">♙</button><button class="user-chip" id="top-login" aria-label="Google লগইন">আ</button></div></header>
+      <header class="topbar"><button class="mobile-brand" aria-label="হিসাবখাতা">হিসাবখাতা</button><div class="breadcrumb" id="breadcrumb">আপনার হিসাব <span>/</span> ড্যাশবোর্ড</div><div class="top-actions"><div class="date-pill"><span>▦</span> <span id="today-date"></span></div><button class="install-app-button" id="install-app" type="button"><span>↓</span> ইনস্টল</button><button class="icon-button profile-shortcut" data-page="profile" aria-label="আমার প্রোফাইল">♙</button><button class="user-chip" id="top-login" aria-label="Google লগইন">আ</button></div></header>
       <section class="page-view active" id="page-home">
         <div class="welcome-row"><div><h1>আসসালামু আলাইকুম 👋</h1><p>আজকের আর্থিক অবস্থার এক নজর</p></div><button class="primary-button" id="quick-add"><span>＋</span> নতুন হিসাব</button></div>
         <div class="summary-grid">

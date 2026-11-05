@@ -418,4 +418,37 @@ async function login() {
   catch (error) { console.error('Login failed', error); showToast(error.code === 'auth/unauthorized-domain' ? 'Firebase Auth-এর অনুমোদিত domain তালিকায় এই সাইট যোগ করুন' : 'Google লগইন হয়নি—Firebase Authentication সেটআপ দেখুন'); }
 }
 $('#login-button').addEventListener('click', login); $('#notice-login').addEventListener('click', login); $('#top-login').addEventListener('click', login);
+
+let pendingInstallPrompt = null;
+const installButton = $('#install-app');
+function updateInstallButton() {
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  installButton.hidden = installed;
+}
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  pendingInstallPrompt = event;
+  updateInstallButton();
+});
+window.addEventListener('appinstalled', () => {
+  pendingInstallPrompt = null;
+  updateInstallButton();
+  showToast('হিসাবখাতা ফোনে ইনস্টল হয়েছে');
+});
+installButton.addEventListener('click', async () => {
+  if (pendingInstallPrompt) {
+    pendingInstallPrompt.prompt();
+    const choice = await pendingInstallPrompt.userChoice;
+    pendingInstallPrompt = null;
+    if (choice.outcome === 'accepted') showToast('ইনস্টল শুরু হয়েছে');
+    else showToast('Chrome-এর মেনু থেকে পরে ইনস্টল করতে পারবেন');
+    return;
+  }
+  showToast('Chrome-এর ⋮ মেনু খুলে “অ্যাপ ইনস্টল করুন” বা “Add to Home screen” চাপুন');
+});
+updateInstallButton();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('App install support could not start', error)));
+}
+
 render(); renderProfile(); updateAccountAppearance(); startFirebase();

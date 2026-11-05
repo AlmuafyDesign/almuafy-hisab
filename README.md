@@ -14,6 +14,7 @@
 - লেনদেন ও ধার-দেনা সম্পাদনা বা নিশ্চিতকরণ নিয়ে মুছে ফেলা
 - নিজের নাম, মোবাইল নম্বর, ঠিকানা ও ছবি/লোগো Firebase profile-এ রাখা
 - ফোনে ব্যবহারযোগ্য ন্যাভিগেশন ও ফর্ম
+- Android Chrome থেকে হিসাবখাতা অ্যাপ হিসেবে ইনস্টল করার সুবিধা
 - Google অ্যাকাউন্টভিত্তিক আলাদা ডেটা; Firestore Rules-এ অন্যের ডেটা আটকানো
 - Bornomala Regular ও Bold ফন্ট local asset হিসেবে সংরক্ষিত
 
@@ -42,6 +43,10 @@ firebase deploy --only hosting,firestore:rules
 ## স্থানীয় preview
 
 এই অ্যাপটি ES modules ও Firebase CDN imports ব্যবহার করে, তাই `file://` থেকে নয়, HTTP server দিয়ে চালাতে হবে। Root folder-টি যেকোনো static HTTP server পরিবেশন করতে পারে। Firebase কনফিগার করা এবং HTTPS domain-এ প্রকাশিত হলে Google popup লগইন কাজ করবে।
+
+## ফোনে ইনস্টল
+
+Android ফোনে Chrome দিয়ে লাইভ অ্যাপ খুলুন এবং উপরের **ইনস্টল** বোতাম চাপুন। যদি Chrome সরাসরি ইনস্টল বার্তা না দেখায়, Chrome-এর তিন ডট মেনু থেকে **অ্যাপ ইনস্টল করুন** বা **Add to Home screen** বাছুন। ইনস্টল করা অ্যাপ থেকে Firebase-এ হিসাব সিঙ্ক করতে ইন্টারনেট ও Google লগইন লাগবে।
 
 ## ফন্ট ও PDF লাইসেন্স
 
