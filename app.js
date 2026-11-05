@@ -1,9 +1,10 @@
 import { firebaseConfig } from './firebase-config.js';
 
 const firebaseReady = Object.values(firebaseConfig).every(Boolean);
-let auth = null, db = null, activeUser = null, unsubscribeEntries = null;
+let auth = null, db = null, activeUser = null, unsubscribeEntries = null, unsubscribeProfile = null;
 let currentType = 'income', currentFilter = 'all', entries = [], toastTimer;
-let selectedLoanForRepayment = null;
+let selectedLoanForRepayment = null, editingEntryId = null, pendingLogoData = null, removeLogoOnSave = false;
+let profile = { name: '', phone: '', address: '', logoData: '' };
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const money = value => `৳${Number(value || 0).toLocaleString('bn-BD', { maximumFractionDigits: 2 })}`;
@@ -18,19 +19,30 @@ function showToast(message) { const toast = $('#toast'); toast.textContent = mes
 function setPage(page) {
   $$('.page-view').forEach(el => el.classList.toggle('active', el.id === `page-${page}`));
   $$('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === page));
-  $('#breadcrumb').innerHTML = `আপনার হিসাব <span>/</span> ${{ home: 'ড্যাশবোর্ড', transactions: 'লেনদেন', loans: 'ধার-দেনা', reports: 'রিপোর্ট' }[page]}`;
+  $('#breadcrumb').innerHTML = `আপনার হিসাব <span>/</span> ${{ home: 'ড্যাশবোর্ড', transactions: 'লেনদেন', loans: 'ধার-দেনা', reports: 'রিপোর্ট', profile: 'আমার প্রোফাইল' }[page]}`;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 $$('[data-page]').forEach(el => el.addEventListener('click', () => setPage(el.dataset.page)));
 $$('[data-goto]').forEach(el => el.addEventListener('click', () => setPage(el.dataset.goto)));
 
-function openForm(type = 'income') {
+function openForm(type = 'income', existing = null) {
+  editingEntryId = existing?.id || null;
   currentType = type;
-  $$('.type-option').forEach(el => el.classList.toggle('selected', el.dataset.type === type));
+  $$('.type-option').forEach(el => { el.classList.toggle('selected', el.dataset.type === type); el.disabled = !!existing; });
   $('#loan-fields').classList.toggle('hidden', type !== 'loan');
-  $('#dialog-title').textContent = type === 'loan' ? 'ধারের হিসাব যোগ করুন' : 'নতুন হিসাব';
   $('#entry-form').reset();
   $('#entry-form').elements.date.value = today;
+  if (existing) {
+    const fields = $('#entry-form').elements;
+    fields.title.value = existing.title || '';
+    fields.category.value = existing.category || 'অন্যান্য';
+    fields.amount.value = String(existing.amount || '');
+    fields.date.value = existing.date || today;
+    fields.note.value = existing.note || '';
+    if (type === 'loan') { fields.direction.value = existing.direction || 'lent'; fields.person.value = existing.person || ''; fields.dueDate.value = existing.dueDate || ''; }
+  }
+  $('#dialog-title').textContent = existing ? (type === 'loan' ? 'ধারের হিসাব সম্পাদনা' : 'হিসাব সম্পাদনা') : type === 'loan' ? 'ধারের হিসাব যোগ করুন' : 'নতুন হিসাব';
+  $('#entry-submit').innerHTML = existing ? 'পরিবর্তন সংরক্ষণ <span>→</span>' : 'হিসাব সংরক্ষণ <span>→</span>';
   $('#entry-dialog').showModal();
 }
 $('#quick-add').addEventListener('click', () => openForm());
@@ -46,15 +58,37 @@ $$('.type-option').forEach(el => el.addEventListener('click', () => {
 
 function sortedEntries() { return [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0)); }
 function renderRows(target, data) {
-  if (!data.length) { target.innerHTML = '<tr class="empty-row"><td colspan="5"><span>⌁</span><strong>এখনো কোনো লেনদেন নেই</strong><small>প্রথম আয়, খরচ বা ধার যোগ করে শুরু করুন</small></td></tr>'; return; }
+  if (!data.length) { target.innerHTML = '<tr class="empty-row"><td colspan="6"><span>⌁</span><strong>এখনো কোনো লেনদেন নেই</strong><small>প্রথম আয়, খরচ বা ধার যোগ করে শুরু করুন</small></td></tr>'; return; }
   target.innerHTML = data.map(item => {
     const typeLabel = { income: 'আয়', expense: 'খরচ', loan: item.direction === 'borrowed' ? 'ধার নিয়েছি' : 'ধার দিয়েছি' }[item.type];
     const name = item.type === 'loan' ? `${item.direction === 'borrowed' ? 'ধার নিয়েছি' : 'ধার দিয়েছি'} · ${esc(item.person)}` : esc(item.title);
-    return `<tr><td><div class="transaction-name"><span class="transaction-icon ${item.type}">${{ income: '↓', expense: '↑', loan: '⇄' }[item.type]}</span>${name}</div></td><td>${esc(item.category || 'অন্যান্য')}</td><td>${dateLabel(item.date)}</td><td><span class="type-badge ${item.type}">${typeLabel}</span></td><td class="amount-cell ${item.type}">${money(item.amount)}</td></tr>`;
+    return `<tr><td><div class="transaction-name"><span class="transaction-icon ${item.type}">${{ income: '↓', expense: '↑', loan: '⇄' }[item.type]}</span>${name}</div></td><td>${esc(item.category || 'অন্যান্য')}</td><td>${dateLabel(item.date)}</td><td><span class="type-badge ${item.type}">${typeLabel}</span></td><td class="amount-cell ${item.type}">${money(item.amount)}</td><td><div class="row-actions"><button class="row-edit" data-edit="${esc(item.id)}" aria-label="${esc(name)} সম্পাদনা">সম্পাদনা</button><button class="row-delete" data-delete="${esc(item.id)}" aria-label="${esc(name)} মুছুন">মুছুন</button></div></td></tr>`;
   }).join('');
 }
 function dateLabel(value) { if (!value) return '—'; const [y, m, d] = value.split('-').map(Number); return new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(y, m - 1, d)); }
 function esc(value = '') { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
+
+async function handleEntryActions(event) {
+  const editButton = event.target.closest('[data-edit]');
+  const deleteButton = event.target.closest('[data-delete]');
+  if (editButton) {
+    const entry = entries.find(item => item.id === editButton.dataset.edit);
+    if (entry) openForm(entry.type, entry);
+    return;
+  }
+  if (!deleteButton) return;
+  const entry = entries.find(item => item.id === deleteButton.dataset.delete);
+  if (!entry || !activeUser || !db) { showToast('মুছতে হলে আগে Google দিয়ে লগইন করুন'); return; }
+  const label = entry.type === 'loan' ? `ধারের হিসাব (${entry.person || 'নাম নেই'})` : `“${entry.title || 'হিসাব'}”`;
+  if (!confirm(`${label} মুছে ফেলবেন? এই কাজটি আর ফিরিয়ে আনা যাবে না।`)) return;
+  try {
+    const { doc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js');
+    await deleteDoc(doc(db, 'users', activeUser.uid, 'entries', entry.id));
+    showToast('হিসাব মুছে ফেলা হয়েছে');
+  } catch (error) { console.error('Delete failed', error); showToast('হিসাব মুছতে পারেনি—Firebase সংযোগ দেখুন'); }
+}
+$('#recent-rows').addEventListener('click', handleEntryActions);
+$('#transaction-rows').addEventListener('click', handleEntryActions);
 
 function render() {
   const income = entries.filter(e => e.type === 'income').reduce((s, e) => s + Number(e.amount), 0);
@@ -87,10 +121,11 @@ function render() {
 function renderLoans(loans) {
   const el = $('#loan-list');
   if (!loans.length) { el.innerHTML = '<div class="empty-loans"><span>⇄</span><strong>এখনো কোনো ধার যোগ করা হয়নি</strong><p>ধার নিলে বা কাউকে ধার দিলে নাম, তারিখ আর টাকার অঙ্ক দিয়ে যোগ করুন</p></div>'; return; }
-  el.innerHTML = loans.map(item => { const remaining = Math.max(0, Number(item.amount) - Number(item.paidAmount || 0)); return `<article class="loan-card"><span class="transaction-icon loan">⇄</span><div class="loan-person"><strong>${esc(item.person || 'নাম উল্লেখ নেই')}</strong><small>${item.direction === 'borrowed' ? 'আপনি ধার নিয়েছেন' : 'আপনি ধার দিয়েছেন'} · ${dateLabel(item.date)}${item.dueDate ? ` · ফেরতের তারিখ ${dateLabel(item.dueDate)}` : ''}</small></div><div class="loan-amount"><strong>${money(remaining)} বাকি</strong><small>মূল টাকা ${money(item.amount)}${Number(item.paidAmount || 0) ? ` · শোধ ${money(item.paidAmount)}` : ''}</small></div><button class="loan-action" data-repay="${esc(item.id)}" ${remaining <= 0 ? 'disabled' : ''}>${remaining <= 0 ? 'শোধ হয়েছে' : 'পরিশোধ যোগ'}</button></article>`; }).join('');
+  el.innerHTML = loans.map(item => { const remaining = Math.max(0, Number(item.amount) - Number(item.paidAmount || 0)); return `<article class="loan-card"><span class="transaction-icon loan">⇄</span><div class="loan-person"><strong>${esc(item.person || 'নাম উল্লেখ নেই')}</strong><small>${item.direction === 'borrowed' ? 'আপনি ধার নিয়েছেন' : 'আপনি ধার দিয়েছেন'} · ${dateLabel(item.date)}${item.dueDate ? ` · ফেরতের তারিখ ${dateLabel(item.dueDate)}` : ''}</small></div><div class="loan-amount"><strong>${money(remaining)} বাকি</strong><small>মূল টাকা ${money(item.amount)}${Number(item.paidAmount || 0) ? ` · শোধ ${money(item.paidAmount)}` : ''}</small></div><button class="loan-action" data-repay="${esc(item.id)}" ${remaining <= 0 ? 'disabled' : ''}>${remaining <= 0 ? 'শোধ হয়েছে' : 'পরিশোধ যোগ'}</button><button class="row-edit" data-edit="${esc(item.id)}" aria-label="${esc(item.person || 'ধার')} সম্পাদনা">সম্পাদনা</button><button class="row-delete" data-delete="${esc(item.id)}" aria-label="${esc(item.person || 'ধার')} মুছুন">মুছুন</button></article>`; }).join('');
 }
 
 $('#loan-list').addEventListener('click', async event => {
+  if (event.target.closest('[data-edit], [data-delete]')) { await handleEntryActions(event); return; }
   const button = event.target.closest('[data-repay]');
   if (!button || !activeUser || !db) return;
   const loan = entries.find(item => item.id === button.dataset.repay);
@@ -237,14 +272,109 @@ $('#entry-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!activeUser || !db) { showToast('Firebase সেটআপ করে Google লগইন করুন, তারপর হিসাব সংরক্ষণ হবে'); return; }
   const form = new FormData(event.currentTarget);
-  const entry = { type: currentType, title: String(form.get('title') || '').trim(), category: String(form.get('category') || 'অন্যান্য'), amount: Number(form.get('amount')), date: String(form.get('date')), note: String(form.get('note') || '').trim(), createdAt: Date.now(), ...(currentType === 'loan' ? { paidAmount: 0, payments: [] } : {}) };
+  const existing = editingEntryId ? entries.find(item => item.id === editingEntryId) : null;
+  if (editingEntryId && !existing) { showToast('হিসাবটি পাওয়া যায়নি—তালিকা আবার দেখুন'); $('#entry-dialog').close(); return; }
+  const entry = { type: currentType, title: String(form.get('title') || '').trim(), category: String(form.get('category') || 'অন্যান্য'), amount: Number(form.get('amount')), date: String(form.get('date')), note: String(form.get('note') || '').trim(), ...(!editingEntryId ? { createdAt: Date.now() } : {}) };
   if (currentType === 'loan') { entry.direction = String(form.get('direction')); entry.person = String(form.get('person') || '').trim(); entry.dueDate = String(form.get('dueDate') || ''); if (!entry.person) { showToast('ধার দেওয়া বা নেওয়া ব্যক্তির নাম লিখুন'); return; } }
   if (!entry.amount || entry.amount <= 0) { showToast('সঠিক টাকার পরিমাণ লিখুন'); return; }
+  if (existing?.type === 'loan' && entry.amount < Number(existing.paidAmount || 0)) { showToast(`টাকার পরিমাণ আগে শোধ করা ${money(existing.paidAmount)}-এর কম হতে পারবে না`); return; }
   try {
-    const { collection, addDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js');
-    await addDoc(collection(db, 'users', activeUser.uid, 'entries'), { ...entry, createdAt: serverTimestamp() });
-    $('#entry-dialog').close(); event.currentTarget.reset(); showToast('হিসাব Firebase-এ সংরক্ষিত হয়েছে');
+    const store = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js');
+    if (editingEntryId) {
+      await store.updateDoc(store.doc(db, 'users', activeUser.uid, 'entries', editingEntryId), { ...entry, updatedAt: store.serverTimestamp() });
+      showToast('পরিবর্তন সংরক্ষণ হয়েছে');
+    } else {
+      await store.addDoc(store.collection(db, 'users', activeUser.uid, 'entries'), { ...entry, createdAt: store.serverTimestamp() });
+      showToast('হিসাব Firebase-এ সংরক্ষিত হয়েছে');
+    }
+    $('#entry-dialog').close(); event.currentTarget.reset(); editingEntryId = null; $$('.type-option').forEach(option => { option.disabled = false; });
   } catch (error) { console.error('Save failed', error); showToast('সংরক্ষণ হয়নি—Firebase Rules ও internet সংযোগ দেখুন'); }
+});
+
+function setAvatar(element, imageUrl, label = 'আ') {
+  if (!element) return;
+  element.replaceChildren();
+  if (imageUrl) {
+    const image = document.createElement('img');
+    image.src = imageUrl;
+    image.alt = `${label} profile`;
+    image.loading = 'lazy';
+    element.append(image);
+  } else element.textContent = String(label || 'আ').trim().charAt(0).toLocaleUpperCase() || 'আ';
+}
+
+function updateAccountAppearance() {
+  const name = activeUser ? (profile.name || activeUser.displayName || activeUser.email || 'আমার প্রোফাইল') : 'Google দিয়ে লগইন';
+  $('#account-label').innerHTML = `${esc(name)}<small>${activeUser ? 'Firebase-এ সিঙ্ক হচ্ছে' : 'আপনার হিসাব সিঙ্ক করুন'}</small>`;
+  const imageUrl = profile.logoData || activeUser?.photoURL || '';
+  setAvatar($('#account-avatar'), imageUrl, name);
+  setAvatar($('#top-login'), imageUrl, name);
+  $('#top-login').setAttribute('aria-label', activeUser ? 'Google অ্যাকাউন্ট থেকে লগআউট' : 'Google দিয়ে লগইন');
+}
+
+function renderProfile() {
+  const fields = $('#profile-form').elements;
+  if (activeUser) {
+    fields.name.value = profile.name || activeUser.displayName || '';
+    fields.phone.value = profile.phone || '';
+    fields.address.value = profile.address || '';
+  } else {
+    fields.name.value = ''; fields.phone.value = ''; fields.address.value = '';
+  }
+  const photo = profile.logoData || activeUser?.photoURL || '';
+  const preview = $('#profile-preview');
+  preview.replaceChildren();
+  if (photo) { const img = document.createElement('img'); img.src = photo; img.alt = 'আপনার profile ছবি'; preview.append(img); }
+  else { const initial = document.createElement('span'); initial.textContent = (profile.name || activeUser?.displayName || 'আ').trim().charAt(0) || 'আ'; preview.append(initial); }
+  $('#profile-image-status').textContent = !activeUser ? 'প্রোফাইল সংরক্ষণে Google দিয়ে লগইন করুন' : removeLogoOnSave ? 'ছবি সরানো হবে—সংরক্ষণ চাপুন' : pendingLogoData ? 'নতুন ছবি বাছা হয়েছে—সংরক্ষণ চাপুন' : profile.logoData ? 'আপনার ছবি Firebase-এ সংরক্ষিত' : activeUser.photoURL ? 'Google profile photo দেখানো হচ্ছে' : 'ছবি আপনার Firebase profile-এ নিরাপদে থাকবে';
+  $('#profile-image').disabled = !activeUser;
+  $('#remove-profile-image').hidden = !activeUser || (!profile.logoData && !pendingLogoData);
+  $$('#profile-form input, #profile-form textarea, #profile-form button[type="submit"]').forEach(field => { field.disabled = !activeUser; });
+}
+
+$('#profile-image').addEventListener('change', event => {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  if (!file) return;
+  if (!activeUser) { showToast('প্রোফাইল ছবি দিতে আগে Google দিয়ে লগইন করুন'); input.value = ''; return; }
+  if (!file.type.startsWith('image/')) { showToast('একটি ছবি ফাইল বাছুন'); input.value = ''; return; }
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = () => {
+    const side = Math.min(image.naturalWidth, image.naturalHeight);
+    const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+    canvas.getContext('2d').drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+    URL.revokeObjectURL(objectUrl);
+    pendingLogoData = canvas.toDataURL('image/jpeg', 0.78);
+    if (pendingLogoData.length > 280000) { canvas.width = 160; canvas.height = 160; canvas.getContext('2d').drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, 160, 160); pendingLogoData = canvas.toDataURL('image/jpeg', 0.65); }
+    if (pendingLogoData.length > 280000) { pendingLogoData = null; showToast('ছবিটি অনেক বড়—ছোট ছবি বাছুন'); input.value = ''; return; }
+    removeLogoOnSave = false; profile.logoData = pendingLogoData; renderProfile(); updateAccountAppearance();
+  };
+  image.onerror = () => { URL.revokeObjectURL(objectUrl); showToast('ছবিটি পড়া যায়নি—অন্য ছবি বাছুন'); };
+  image.src = objectUrl;
+});
+
+$('#remove-profile-image').addEventListener('click', () => {
+  if (!activeUser) return;
+  pendingLogoData = ''; removeLogoOnSave = true; profile.logoData = ''; renderProfile(); updateAccountAppearance();
+});
+
+$('#profile-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!activeUser || !db) { showToast('প্রোফাইল সংরক্ষণে Google দিয়ে লগইন করুন'); return; }
+  const values = new FormData(event.currentTarget);
+  const nextProfile = {
+    name: String(values.get('name') || '').trim(),
+    phone: String(values.get('phone') || '').trim(),
+    address: String(values.get('address') || '').trim(),
+    logoData: removeLogoOnSave ? '' : pendingLogoData !== null ? pendingLogoData : profile.logoData || ''
+  };
+  if (!nextProfile.name) { showToast('আপনার নাম লিখুন'); return; }
+  try {
+    const { doc, setDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js');
+    await setDoc(doc(db, 'users', activeUser.uid), { ...nextProfile, updatedAt: serverTimestamp() }, { merge: true });
+    profile = nextProfile; pendingLogoData = null; removeLogoOnSave = false; renderProfile(); updateAccountAppearance(); showToast('আপনার প্রোফাইল সংরক্ষিত হয়েছে');
+  } catch (error) { console.error('Profile save failed', error); showToast('প্রোফাইল সংরক্ষণ হয়নি—Firestore rules দেখুন'); }
 });
 
 async function startFirebase() {
@@ -259,9 +389,19 @@ async function startFirebase() {
     authModule.onAuthStateChanged(auth, user => {
       activeUser = user;
       if (unsubscribeEntries) { unsubscribeEntries(); unsubscribeEntries = null; }
-      if (!user) { entries = []; render(); $('#account-label').innerHTML = 'Google দিয়ে লগইন<small>আপনার হিসাব সিঙ্ক করুন</small>'; $('#top-login').textContent = 'আ'; $('#sync-label').textContent = 'Google লগইন করা নেই'; $('#sync-label').previousElementSibling.classList.remove('connected'); $('#cloud-notice').classList.remove('hidden'); return; }
-      $('#account-label').innerHTML = `${esc(user.displayName || user.email)}<small>Firebase-এ সিঙ্ক হচ্ছে</small>`; $('#top-login').textContent = (user.displayName || user.email || 'আ').charAt(0).toLocaleUpperCase(); $('#sync-label').textContent = 'Firebase-এ সিঙ্ক হচ্ছে'; $('#sync-label').previousElementSibling.classList.add('connected'); $('#cloud-notice').classList.add('hidden');
-      const { collection, query, orderBy, onSnapshot } = storeModule;
+      if (unsubscribeProfile) { unsubscribeProfile(); unsubscribeProfile = null; }
+      if (!user) {
+        entries = []; profile = { name: '', phone: '', address: '', logoData: '' }; pendingLogoData = null; removeLogoOnSave = false;
+        render(); renderProfile(); updateAccountAppearance(); $('#sync-label').textContent = 'Google লগইন করা নেই'; $('#sync-label').previousElementSibling.classList.remove('connected'); $('#cloud-notice').classList.remove('hidden'); return;
+      }
+      profile = { name: user.displayName || '', phone: '', address: '', logoData: '' };
+      updateAccountAppearance(); $('#sync-label').textContent = 'Firebase-এ সিঙ্ক হচ্ছে'; $('#sync-label').previousElementSibling.classList.add('connected'); $('#cloud-notice').classList.add('hidden');
+      const { collection, query, orderBy, onSnapshot, doc } = storeModule;
+      unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), snapshot => {
+        const saved = snapshot.exists() ? snapshot.data() : {};
+        profile = { name: String(saved.name || user.displayName || ''), phone: String(saved.phone || ''), address: String(saved.address || ''), logoData: typeof saved.logoData === 'string' ? saved.logoData : '' };
+        renderProfile(); updateAccountAppearance();
+      }, error => { console.error('Profile sync failed', error); $('#profile-image-status').textContent = 'প্রোফাইল sync হয়নি—Firestore rules যাচাই করুন'; });
       unsubscribeEntries = onSnapshot(query(collection(db, 'users', user.uid, 'entries'), orderBy('date', 'desc')), snapshot => {
         entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt?.toMillis?.() || 0 })); render(); $('#sync-label').textContent = 'Firebase-এ সিঙ্ক হয়েছে';
       }, error => { console.error('Sync failed', error); $('#sync-label').textContent = 'সিঙ্ক হয়নি — Firebase Rules দেখুন'; showToast('Firebase ডেটা পড়া যায়নি'); });
@@ -278,4 +418,4 @@ async function login() {
   catch (error) { console.error('Login failed', error); showToast(error.code === 'auth/unauthorized-domain' ? 'Firebase Auth-এর অনুমোদিত domain তালিকায় এই সাইট যোগ করুন' : 'Google লগইন হয়নি—Firebase Authentication সেটআপ দেখুন'); }
 }
 $('#login-button').addEventListener('click', login); $('#notice-login').addEventListener('click', login); $('#top-login').addEventListener('click', login);
-render(); startFirebase();
+render(); renderProfile(); updateAccountAppearance(); startFirebase();

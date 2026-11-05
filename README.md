@@ -11,13 +11,15 @@
 - আয়/ব্যয়/ব্যালেন্স সারাংশ, গত ৬/১২ মাসের চার্ট, খরচের খাত
 - লেনদেন তালিকা, ধরনভিত্তিক ফিল্টার ও নাম/খাত দিয়ে খোঁজা
 - দৈনিক, মাসিক ও বার্ষিক হিসাবের PDF এবং CSV রিপোর্ট ডাউনলোড
+- লেনদেন ও ধার-দেনা সম্পাদনা বা নিশ্চিতকরণ নিয়ে মুছে ফেলা
+- নিজের নাম, মোবাইল নম্বর, ঠিকানা ও ছবি/লোগো Firebase profile-এ রাখা
 - ফোনে ব্যবহারযোগ্য ন্যাভিগেশন ও ফর্ম
 - Google অ্যাকাউন্টভিত্তিক আলাদা ডেটা; Firestore Rules-এ অন্যের ডেটা আটকানো
 - Bornomala Regular ও Bold ফন্ট local asset হিসেবে সংরক্ষিত
 
 ## Firebase সেটআপ
 
-Firebase project `almuafy-hisab-e8803`-এর web app config `firebase-config.js`-এ যুক্ত। Firebase Console-এ Google Authentication চালু এবং Cloud Firestore database তৈরি আছে। অ্যাপ Google popup login, user-specific Firestore records এবং live snapshot sync ব্যবহার করে। `firestore.rules` প্রতিটি ব্যবহারকারীর ডেটা তার নিজের UID-তে সীমাবদ্ধ করে।
+Firebase project `almuafy-hisab-e8803`-এর web app config `firebase-config.js`-এ যুক্ত। Firebase Console-এ Google Authentication চালু এবং Cloud Firestore database তৈরি আছে। অ্যাপ Google popup login, user-specific Firestore records এবং live snapshot sync ব্যবহার করে। `firestore.rules` প্রতিটি ব্যবহারকারীর profile document ও entries তার নিজের UID-তে সীমাবদ্ধ করে।
 
 Rules প্রকাশ করতে Firebase CLI-তে project login করে project root থেকে চালান:
 
