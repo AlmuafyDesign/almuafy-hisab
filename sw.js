@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hisabkhaata-shell-v1';
+const CACHE_NAME = 'hisabkhaata-shell-v2';
 const APP_FILES = [
   './',
   './index.html',
