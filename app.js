@@ -11,9 +11,31 @@ const money = value => `৳${Number(value || 0).toLocaleString('bn-BD', { maximu
 const localNow = new Date();
 const today = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`;
 
-$('#today-date').textContent = new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date());
+function dateParts(value) { if (!value) return null; const [year, month, day] = value.split('-').map(Number); if (!year || !month || !day) return null; return new Date(Date.UTC(year, month - 1, day, 12)); }
+function gregorianDateText(value, options = { day: 'numeric', month: 'short', year: 'numeric' }) { const date = dateParts(value); return date ? new Intl.DateTimeFormat('bn-BD', { ...options, timeZone: 'UTC' }).format(date) : '—'; }
+let hijriFormatter;
+try { hijriFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+catch { try { hijriFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); } catch { hijriFormatter = null; } }
+function hijriDateText(value) {
+  const date = dateParts(value);
+  if (!date || !hijriFormatter) return '';
+  try { return hijriFormatter.format(date); }
+  catch { return ''; }
+}
+function dateLabel(value) { if (!value) return '—'; const gregorian = gregorianDateText(value); const hijri = hijriDateText(value); return `<span class="date-pair-cell"><span>${gregorian}</span>${hijri ? `<small dir="rtl">${hijri}</small>` : ''}</span>`; }
+$('#today-date').textContent = gregorianDateText(today);
+$('#today-hijri').textContent = hijriDateText(today);
 $('#entry-form').elements.date.value = today;
 $('#report-date').value = today;
+function updateHijriHints() {
+  const entryDate = $('#entry-form').elements.date.value;
+  const dueDate = $('#entry-form').elements.dueDate.value;
+  $('#entry-date-hijri').textContent = entryDate ? `হিজরি: ${hijriDateText(entryDate)}` : 'তারিখ দিলে Hijri তারিখ দেখা যাবে';
+  $('#due-date-hijri').textContent = dueDate ? `হিজরি: ${hijriDateText(dueDate)}` : '';
+}
+$('#entry-form').elements.date.addEventListener('input', updateHijriHints);
+$('#entry-form').elements.dueDate.addEventListener('input', updateHijriHints);
+updateHijriHints();
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 3200); }
 
 function setPage(page) {
@@ -41,6 +63,7 @@ function openForm(type = 'income', existing = null) {
     fields.note.value = existing.note || '';
     if (type === 'loan') { fields.direction.value = existing.direction || 'lent'; fields.person.value = existing.person || ''; fields.dueDate.value = existing.dueDate || ''; }
   }
+  updateHijriHints();
   $('#dialog-title').textContent = existing ? (type === 'loan' ? 'ধারের হিসাব সম্পাদনা' : 'হিসাব সম্পাদনা') : type === 'loan' ? 'ধারের হিসাব যোগ করুন' : 'নতুন হিসাব';
   $('#entry-submit').innerHTML = existing ? 'পরিবর্তন সংরক্ষণ <span>→</span>' : 'হিসাব সংরক্ষণ <span>→</span>';
   $('#entry-dialog').showModal();
@@ -65,7 +88,6 @@ function renderRows(target, data) {
     return `<tr><td><div class="transaction-name"><span class="transaction-icon ${item.type}">${{ income: '↓', expense: '↑', loan: '⇄' }[item.type]}</span>${name}</div></td><td>${esc(item.category || 'অন্যান্য')}</td><td>${dateLabel(item.date)}</td><td><span class="type-badge ${item.type}">${typeLabel}</span></td><td class="amount-cell ${item.type}">${money(item.amount)}</td><td><div class="row-actions"><button class="row-edit" data-edit="${esc(item.id)}" aria-label="${esc(name)} সম্পাদনা">সম্পাদনা</button><button class="row-delete" data-delete="${esc(item.id)}" aria-label="${esc(name)} মুছুন">মুছুন</button></div></td></tr>`;
   }).join('');
 }
-function dateLabel(value) { if (!value) return '—'; const [y, m, d] = value.split('-').map(Number); return new Intl.DateTimeFormat('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(y, m - 1, d)); }
 function esc(value = '') { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
 
 async function handleEntryActions(event) {
@@ -199,7 +221,12 @@ function getReportRows() {
     });
   });
   const bengaliYear = new Intl.DateTimeFormat('bn-BD', { year: 'numeric' }).format(new Date(Number(year), 0, 1));
-  const name = period === 'day' ? `দৈনিক · ${dateLabel(selectedDate)}` : period === 'month' ? `মাসিক · ${new Intl.DateTimeFormat('bn-BD', { month: 'long', year: 'numeric' }).format(new Date(Number(year), Number(month) - 1, 1))}` : `বার্ষিক · ${bengaliYear}`;
+  const monthStart = `${year}-${month}-01`;
+  const monthEnd = `${year}-${month}-${String(new Date(Number(year), Number(month), 0).getDate()).padStart(2, '0')}`;
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const monthLabel = new Intl.DateTimeFormat('bn-BD', { month: 'long', year: 'numeric' }).format(new Date(Number(year), Number(month) - 1, 1));
+  const name = period === 'day' ? `দৈনিক · ${gregorianDateText(selectedDate)} · ${hijriDateText(selectedDate)}` : period === 'month' ? `মাসিক · ${monthLabel} · ${hijriDateText(monthStart)} — ${hijriDateText(monthEnd)}` : `বার্ষিক · ${bengaliYear} · ${hijriDateText(yearStart)} — ${hijriDateText(yearEnd)}`;
   return { rows: rows.sort((a, b) => b.date.localeCompare(a.date)), period, selectedDate, name };
 }
 
@@ -212,7 +239,7 @@ function renderReport() {
   const periodName = { day: 'দৈনিক হিসাব', month: 'মাসিক হিসাব', year: 'বার্ষিক হিসাব' }[report.period];
   $('#report-title').textContent = periodName;
   $('#report-range-label').textContent = report.name;
-  $('#report-generated-date').textContent = dateLabel(today);
+  $('#report-generated-date').innerHTML = dateLabel(today);
   $('#report-entry-count').textContent = `${report.rows.length.toLocaleString('bn-BD')}টি লেনদেন`;
   $('#report-income').textContent = money(income);
   $('#report-expense').textContent = money(expense);
