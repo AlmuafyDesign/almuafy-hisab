@@ -158,8 +158,15 @@ $('#loan-list').addEventListener('click', async event => {
   $('#repayment-form').elements.amount.max = String(remaining);
   $('#repayment-form').elements.amount.value = String(remaining);
   $('#repayment-form').elements.date.value = today;
+  updateRepaymentHijriHint();
   $('#repayment-dialog').showModal();
 });
+function updateRepaymentHijriHint() {
+  const value = $('#repayment-form').elements.date.value;
+  $('#repayment-date-hijri').textContent = value ? `হিজরি: ${hijriDateText(value)}` : 'তারিখ দিলে Hijri তারিখ দেখা যাবে';
+}
+$('#repayment-form').elements.date.addEventListener('input', updateRepaymentHijriHint);
+updateRepaymentHijriHint();
 $$('[data-close-repayment]').forEach(button => button.addEventListener('click', () => $('#repayment-dialog').close()));
 $('#repayment-form').addEventListener('submit', async event => {
   event.preventDefault();
